@@ -6,18 +6,17 @@ survives across sessions/containers - reruns only touch new or failed rows.
 import json
 import os
 
-DEFAULT_STATE_PATH = "data/state.json"
 MAX_RETRY_ATTEMPTS = 3
 
 
-def load(path: str = DEFAULT_STATE_PATH) -> dict:
+def load(path: str) -> dict:
     if not os.path.exists(path):
         return {}
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def save(state: dict, path: str = DEFAULT_STATE_PATH) -> None:
+def save(state: dict, path: str) -> None:
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     tmp_path = path + ".tmp"
     with open(tmp_path, "w", encoding="utf-8") as f:

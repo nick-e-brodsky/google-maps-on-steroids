@@ -17,10 +17,6 @@ MIN_REQUEST_INTERVAL = 1.1  # seconds, stays above the 1 req/sec policy limit
 MAX_ATTEMPTS = 5
 BACKOFF_BASE = 2  # seconds; doubles each attempt: 2, 4, 8, 16, 32
 
-# left,top,right,bottom - keeps free-text matches from drifting to
-# same-named places outside NYC (e.g. "EDEN" -> a town in Erie County).
-NYC_VIEWBOX = "-74.26,40.92,-73.68,40.48"
-
 _last_request_time = 0.0
 
 
@@ -37,25 +33,34 @@ def _throttle():
     _last_request_time = time.monotonic()
 
 
-def search(query: str) -> list[dict]:
+def search(query: str, viewbox: str | None = None) -> list[dict]:
     """Search Nominatim for `query`. Retries transient failures with backoff.
+
+    `viewbox` (left,top,right,bottom) restricts matches to a bounding box -
+    keeps free-text matches from drifting to same-named places elsewhere
+    (e.g. a business called "EDEN" matching a town instead of the actual
+    venue). Pass the target location's bounding box; omit for an unbounded
+    worldwide search.
 
     Raises GeocodeError if all attempts are exhausted.
     """
+    params = {
+        "q": query,
+        "format": "jsonv2",
+        "addressdetails": 1,
+        "limit": 1,
+    }
+    if viewbox:
+        params["viewbox"] = viewbox
+        params["bounded"] = 1
+
     last_error = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         _throttle()
         try:
             resp = requests.get(
                 NOMINATIM_URL,
-                params={
-                    "q": query,
-                    "format": "jsonv2",
-                    "addressdetails": 1,
-                    "limit": 1,
-                    "viewbox": NYC_VIEWBOX,
-                    "bounded": 1,
-                },
+                params=params,
                 headers={"User-Agent": USER_AGENT},
                 timeout=20,
             )
