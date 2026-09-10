@@ -3,7 +3,11 @@
 reruns only touch new or failed rows.
 
 Usage:
-    python3 src/geocode.py data/input/<file>.csv [--retry-failed]
+    python3 src/geocode.py <location> <csv_path> [--retry-failed]
+
+`location` picks the data/<location>/ directory (state, category overrides,
+config.json with the Nominatim query suffix + bounding box for that city).
+See data/new_york/ for an example when adding a new city.
 
 Safe to interrupt: state is saved after every row. Safe to rerun against the
 same or a newer export of the same list - already-succeeded rows (keyed by
@@ -12,12 +16,14 @@ Google Maps URL) are skipped.
 
 import argparse
 import csv
+import json
 import os
 import sys
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from lib import paths
 from lib import state as state_lib
 from lib import categorize
 from lib.nominatim import search, GeocodeError
@@ -75,13 +81,13 @@ def read_rows(csv_path: str) -> list[dict]:
     return rows
 
 
-def geocode_one(title: str) -> tuple[dict | None, str | None]:
+def geocode_one(title: str, query_suffix: str, viewbox: str | None) -> tuple[dict | None, str | None]:
     """Try a couple of query variants. Returns (result, error)."""
-    queries = [f"{title}, New York, NY", title]
+    queries = [f"{title}, {query_suffix}", title]
     last_error = None
     for q in queries:
         try:
-            results = search(q)
+            results = search(q, viewbox=viewbox)
         except GeocodeError as exc:
             last_error = str(exc)
             continue
@@ -90,18 +96,33 @@ def geocode_one(title: str) -> tuple[dict | None, str | None]:
     return None, last_error or "no results"
 
 
+def load_config(location: str) -> dict:
+    path = paths.config_path(location)
+    if not os.path.exists(path):
+        raise SystemExit(
+            f"No config at {path}. Add one with query_suffix and viewbox - "
+            f"see data/new_york/config.json for an example."
+        )
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("location", help="Location key, e.g. new_york (see data/<location>/)")
     parser.add_argument("csv_path", help="Path to the Takeout Saved-places CSV")
     parser.add_argument(
         "--retry-failed", action="store_true",
         help="Also retry rows previously marked failed (up to 3 attempts total)",
     )
-    parser.add_argument("--state", default=state_lib.DEFAULT_STATE_PATH)
     args = parser.parse_args()
 
+    config = load_config(args.location)
+    state_path = paths.state_path(args.location)
+    overrides_path = paths.overrides_path(args.location)
+
     rows = read_rows(args.csv_path)
-    state = state_lib.load(args.state)
+    state = state_lib.load(state_path)
 
     to_process = []
     for row in rows:
@@ -130,7 +151,7 @@ def main():
         record["attempts"] = record.get("attempts", 0) + 1
         record["last_attempt"] = datetime.now(timezone.utc).isoformat()
 
-        result, error = geocode_one(title)
+        result, error = geocode_one(title, config["query_suffix"], config.get("viewbox"))
         if result is None:
             record["status"] = "failed"
             record["error"] = error
@@ -138,7 +159,9 @@ def main():
         else:
             osm_category = result.get("category")
             osm_type = result.get("type")
-            category, confidence = categorize.categorize(title, tags, osm_category, osm_type)
+            category, confidence = categorize.categorize(
+                title, tags, osm_category, osm_type, overrides_path=overrides_path,
+            )
             match_confidence = _match_confidence(result)
             record.update({
                 "status": "success",
@@ -158,7 +181,7 @@ def main():
             print(f"OK -> {record['address']} [{category}/{confidence}]{flag}")
 
         state[key] = record
-        state_lib.save(state, args.state)
+        state_lib.save(state, state_path)
 
     succeeded = sum(1 for r in state.values() if r.get("status") == "success")
     failed = sum(1 for r in state.values() if r.get("status") == "failed")

@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Build My-Maps-ready CSVs from data/state.json.
+"""Build a My-Maps-ready CSV from a location's data/<location>/state.json.
 
-Writes:
-  data/output/all_places.csv               - every tracked place, incl. failures
-  data/output/by_category/<Category>.csv   - one file per category, successes only
-                                              (import each as a separate My Maps layer)
+Writes data/<location>/output/places.csv with a Category column. Import it
+into Google My Maps as a single layer, then use "Style by data column" ->
+Category to get per-category colors/icons with toggleable groups in the
+map's legend - no need for separate per-category files.
 
-Category is recomputed from the stored OSM tags + data/category_overrides.json
-on every run, so editing overrides doesn't require re-geocoding.
+Category is recomputed from the stored OSM tags + the location's
+category_overrides.json on every run, so editing overrides doesn't require
+re-geocoding.
 
 Usage:
-    python3 src/export.py
+    python3 src/export.py <location>
 """
 
 import argparse
@@ -20,33 +21,29 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from lib import paths
 from lib import state as state_lib
 from lib import categorize
 
-OUTPUT_DIR = "data/output"
 FIELDS = ["Title", "Category", "Neighborhood", "Address", "Lat", "Long", "Original_URL"]
-
-
-def safe_filename(category: str) -> str:
-    return category.replace("/", "-") + ".csv"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--state", default=state_lib.DEFAULT_STATE_PATH)
-    parser.add_argument("--output-dir", default=OUTPUT_DIR)
+    parser.add_argument("location", help="Location key, e.g. new_york (see data/<location>/)")
     args = parser.parse_args()
 
-    state = state_lib.load(args.state)
+    state_path = paths.state_path(args.location)
+    overrides_path = paths.overrides_path(args.location)
+    output_path = paths.output_path(args.location)
+
+    state = state_lib.load(state_path)
     if not state:
-        print(f"No state found at {args.state} - run src/geocode.py first.")
+        print(f"No state found at {state_path} - run src/geocode.py first.")
         return
 
-    by_category_dir = os.path.join(args.output_dir, "by_category")
-    os.makedirs(by_category_dir, exist_ok=True)
-
-    all_rows = []
-    by_category = {}
+    rows = []
+    category_counts = {}
     confidence_counts = {}
     low_match_confidence = []
     failed = []
@@ -55,22 +52,19 @@ def main():
         title = record["title"]
         if record.get("status") != "success":
             failed.append(record)
-            all_rows.append({
-                "Title": title, "Category": "", "Neighborhood": "",
-                "Address": "", "Lat": "", "Long": "",
-                "Original_URL": record.get("url", ""),
-            })
             continue
 
         category, confidence = categorize.categorize(
             title, record.get("tags", ""),
             record.get("osm_category"), record.get("osm_type"),
+            overrides_path=overrides_path,
         )
+        category_counts[category] = category_counts.get(category, 0) + 1
         confidence_counts[confidence] = confidence_counts.get(confidence, 0) + 1
         if record.get("match_confidence") == "low":
             low_match_confidence.append(title)
 
-        row = {
+        rows.append({
             "Title": title,
             "Category": category,
             "Neighborhood": record.get("neighborhood", ""),
@@ -78,31 +72,21 @@ def main():
             "Lat": record.get("lat", ""),
             "Long": record.get("lon", ""),
             "Original_URL": record.get("url", ""),
-        }
-        all_rows.append(row)
-        by_category.setdefault(category, []).append(row)
+        })
 
-    all_path = os.path.join(args.output_dir, "all_places.csv")
-    with open(all_path, "w", newline="", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
         writer.writeheader()
-        writer.writerows(all_rows)
+        writer.writerows(rows)
 
-    for category, rows in by_category.items():
-        path = os.path.join(by_category_dir, safe_filename(category))
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=FIELDS)
-            writer.writeheader()
-            writer.writerows(rows)
-
-    print(f"Wrote {all_path} ({len(all_rows)} rows).")
-    print(f"Wrote {len(by_category)} category files under {by_category_dir}/:")
-    for category in sorted(by_category, key=lambda c: -len(by_category[c])):
-        print(f"  {category}: {len(by_category[category])}")
-
-    print(f"\n{len(state)} tracked, {len(all_rows) - len(failed)} succeeded, "
-          f"{len(failed)} failed.")
+    print(f"Wrote {output_path} ({len(rows)} rows).")
+    print(f"\n{len(state)} tracked, {len(rows)} succeeded, {len(failed)} failed.")
+    print("By category:")
+    for category, count in sorted(category_counts.items(), key=lambda kv: -kv[1]):
+        print(f"  {category}: {count}")
     print(f"Category confidence: {confidence_counts}")
+
     if failed:
         print("\nFailed to geocode (review or rerun with --retry-failed):")
         for r in failed:
@@ -111,7 +95,7 @@ def main():
     none_conf = confidence_counts.get("none", 0)
     if none_conf:
         print(f"\n{none_conf} place(s) fell back to Other/Uncategorized with no "
-              f"OSM/keyword signal - worth a manual look via data/category_overrides.json.")
+              f"OSM/keyword signal - worth a manual look via {overrides_path}.")
 
     if low_match_confidence:
         print(f"\n{len(low_match_confidence)} place(s) matched a generic street/area "
