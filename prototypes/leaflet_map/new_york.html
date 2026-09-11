@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>new_york - Leaflet prototype</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+  #map { height: 100%; }
+  .legend {
+    background: white; padding: 8px 10px; border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 13px; line-height: 1.6;
+  }
+  .legend .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    margin-right: 6px;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+  const places = [{"title": "56 Bogart St", "lat": 40.705865, "lon": -73.9331729, "category": "Other/Uncategorized", "neighborhood": "Brooklyn"}, {"title": "EDEN (Eden Gallery) - SoHo", "lat": 40.7226991, "lon": -74.0014366, "category": "Galleries", "neighborhood": "Little Italy"}, {"title": "EDEN", "lat": 40.8443436, "lon": -73.9147452, "category": "Other/Uncategorized", "neighborhood": "The Bronx"}, {"title": "Eric Firestone Gallery", "lat": 40.7269555, "lon": -73.9926816, "category": "Galleries", "neighborhood": "NoHo"}, {"title": "Hall des Lumi\u00e8res", "lat": 40.713744, "lon": -74.005072, "category": "Museums/Cultural Institutions", "neighborhood": "Civic Center"}, {"title": "Jeffrey Deitch", "lat": 40.7219434, "lon": -74.002655, "category": "Galleries", "neighborhood": "Little Italy"}, {"title": "Klom Klorm", "lat": 40.7031166, "lon": -73.9170639, "category": "Dining", "neighborhood": "Bushwick"}, {"title": "Tabar\u00e9 Bushwick", "lat": 40.7038002, "lon": -73.93073, "category": "Dining", "neighborhood": "Bushwick"}];
+  const colors = {"Dining": "#e74c3c", "Coffee/Bakery": "#935116", "Bars/Nightlife": "#8e44ad", "Galleries": "#2980b9", "Museums/Cultural Institutions": "#16a085", "Arts/Studios/Event Spaces": "#d35400", "Shops/Retail": "#f1c40f", "Parks/Outdoors": "#27ae60", "Other/Uncategorized": "#7f8c8d"};
+
+  const map = L.map('map');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  }).addTo(map);
+
+  const bounds = [];
+  const usedCategories = new Set();
+  places.forEach(p => {
+    const color = colors[p.category] || '#333';
+    usedCategories.add(p.category);
+    const marker = L.circleMarker([p.lat, p.lon], {
+      radius: 7, color: color, fillColor: color, fillOpacity: 0.85, weight: 1,
+    }).addTo(map);
+    marker.bindPopup(`<b>${p.title}</b><br>${p.category}<br>${p.neighborhood || ''}`);
+    bounds.push([p.lat, p.lon]);
+  });
+  if (bounds.length) { map.fitBounds(bounds, { padding: [30, 30] }); }
+  else { map.setView([40.7128, -74.0060], 12); }
+
+  const legend = L.control({ position: 'bottomright' });
+  legend.onAdd = function() {
+    const div = L.DomUtil.create('div', 'legend');
+    let html = '<b>Category</b><br>';
+    [...usedCategories].sort().forEach(cat => {
+      html += `<span class="swatch" style="background:${colors[cat] || '#333'}"></span>${cat}<br>`;
+    });
+    div.innerHTML = html;
+    return div;
+  };
+  legend.addTo(map);
+</script>
+</body>
+</html>
