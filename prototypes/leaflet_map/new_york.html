@@ -33,6 +33,7 @@
 
   const categories = [...new Set(places.map(p => p.category))].sort();
   const neighborhoods = [...new Set(places.map(p => p.neighborhood).filter(Boolean))].sort();
+  const cuisines = [...new Set(places.map(p => p.cuisine).filter(Boolean))].sort();
 
   const map = L.map('map');
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -42,6 +43,7 @@
 
   const activeCategories = new Set(categories);
   const activeNeighborhoods = new Set(neighborhoods);
+  const activeCuisines = new Set(cuisines);
 
   const markers = places.map(p => {
     const color = colors[p.category] || '#333';
@@ -53,11 +55,14 @@
     return { marker, place: p };
   });
 
+  // Cuisine only applies to places that have one (Dining) - a place with no
+  // cuisine value is never hidden by the cuisine filter.
   function applyFilters() {
     const bounds = [];
     markers.forEach(({ marker, place }) => {
       const visible = activeCategories.has(place.category) &&
-        (place.neighborhood === '' || activeNeighborhoods.has(place.neighborhood));
+        (place.neighborhood === '' || activeNeighborhoods.has(place.neighborhood)) &&
+        (place.cuisine === '' || activeCuisines.has(place.cuisine));
       if (visible) {
         if (!map.hasLayer(marker)) marker.addTo(map);
         bounds.push([place.lat, place.lon]);
@@ -66,6 +71,12 @@
       }
     });
     return bounds;
+  }
+
+  function refresh() {
+    const bounds = applyFilters();
+    if (bounds.length) { map.fitBounds(bounds, { padding: [30, 30] }); }
+    else { map.setView([40.7128, -74.0060], 12); }
   }
 
   function buildFilterGroup(title, items, activeSet, colorFor) {
@@ -78,7 +89,7 @@
       const allOn = items.every(i => activeSet.has(i));
       items.forEach(i => allOn ? activeSet.delete(i) : activeSet.add(i));
       div.querySelectorAll('input').forEach(cb => cb.checked = !allOn);
-      applyFilters();
+      refresh();
     };
     items.forEach(item => {
       const label = L.DomUtil.create('label', '', div);
@@ -87,7 +98,7 @@
       cb.checked = true;
       cb.onchange = () => {
         if (cb.checked) activeSet.add(item); else activeSet.delete(item);
-        applyFilters();
+        refresh();
       };
       label.appendChild(cb);
       if (colorFor) {
@@ -107,13 +118,15 @@
     div.appendChild(buildFilterGroup('Category', categories, activeCategories, c => colors[c] || '#333'));
     div.appendChild(document.createElement('hr'));
     div.appendChild(buildFilterGroup('Neighborhood', neighborhoods, activeNeighborhoods, null));
+    if (cuisines.length) {
+      div.appendChild(document.createElement('hr'));
+      div.appendChild(buildFilterGroup('Cuisine', cuisines, activeCuisines, null));
+    }
     return div;
   };
   filterControl.addTo(map);
 
-  const bounds = applyFilters();
-  if (bounds.length) { map.fitBounds(bounds, { padding: [30, 30] }); }
-  else { map.setView([40.7128, -74.0060], 12); }
+  refresh();
 </script>
 </body>
 </html>
