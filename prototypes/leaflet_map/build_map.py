@@ -65,7 +65,9 @@ HTML_TEMPLATE = """<!doctype html>
     display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none;
   }}
   .filters hr {{ border: none; border-top: 1px solid #ddd; margin: 8px 0; }}
-  .count {{ color: #888; font-size: 11px; }}
+  .stats {{ font-size: 12px; color: #333; margin-bottom: 4px; }}
+  .stats.failed {{ color: #888; margin-bottom: 8px; }}
+  .popup-link {{ display: inline-block; margin-top: 4px; }}
 </style>
 </head>
 <body>
@@ -73,6 +75,8 @@ HTML_TEMPLATE = """<!doctype html>
 <script>
   const places = {places_json};
   const colors = {colors_json};
+  const totalPlotted = {total_plotted};
+  const failedCount = {failed_count};
 
   const categories = [...new Set(places.map(p => p.category))].sort();
   const neighborhoods = [...new Set(places.map(p => p.neighborhood).filter(Boolean))].sort();
@@ -94,7 +98,10 @@ HTML_TEMPLATE = """<!doctype html>
       radius: 7, color: color, fillColor: color, fillOpacity: 0.85, weight: 1,
     }});
     const cuisineLine = p.cuisine ? `<br>${{p.cuisine}} cuisine` : '';
-    marker.bindPopup(`<b>${{p.title}}</b><br>${{p.category}}${{cuisineLine}}<br>${{p.neighborhood || ''}}`);
+    const mapsLink = p.url
+      ? `<br><a class="popup-link" href="${{p.url}}" target="_blank" rel="noopener">View on Google Maps</a>`
+      : '';
+    marker.bindPopup(`<b>${{p.title}}</b><br>${{p.category}}${{cuisineLine}}<br>${{p.neighborhood || ''}}${{mapsLink}}`);
     return {{ marker, place: p }};
   }});
 
@@ -118,6 +125,8 @@ HTML_TEMPLATE = """<!doctype html>
 
   function refresh() {{
     const bounds = applyFilters();
+    const statsEl = document.getElementById('stats-count');
+    if (statsEl) statsEl.textContent = `Showing ${{bounds.length}} of ${{totalPlotted}} places`;
     if (bounds.length) {{ map.fitBounds(bounds, {{ padding: [30, 30] }}); }}
     else {{ map.setView([40.7128, -74.0060], 12); }}
   }}
@@ -158,6 +167,14 @@ HTML_TEMPLATE = """<!doctype html>
     const div = L.DomUtil.create('div', 'filters');
     L.DomEvent.disableClickPropagation(div);
     L.DomEvent.disableScrollPropagation(div);
+    const stats = L.DomUtil.create('div', 'stats', div);
+    stats.id = 'stats-count';
+    stats.textContent = `Showing ${{totalPlotted}} of ${{totalPlotted}} places`;
+    if (failedCount > 0) {{
+      const failedLine = L.DomUtil.create('div', 'stats failed', div);
+      failedLine.textContent = `${{failedCount}} more failed to geocode (not shown)`;
+    }}
+    div.appendChild(document.createElement('hr'));
     div.appendChild(buildFilterGroup('Category', categories, activeCategories, c => colors[c] || '#333'));
     div.appendChild(document.createElement('hr'));
     div.appendChild(buildFilterGroup('Neighborhood', neighborhoods, activeNeighborhoods, null));
@@ -210,7 +227,11 @@ def main():
             "category": category,
             "neighborhood": r.get("neighborhood", ""),
             "cuisine": cuisine.get(title, ""),
+            "url": r.get("url", ""),
         })
+
+    total_tracked = len(state)
+    failed_count = total_tracked - len(places)
 
     output_path = args.output or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), f"{args.location}.html"
@@ -219,6 +240,8 @@ def main():
         location=args.location,
         places_json=json.dumps(places),
         colors_json=json.dumps(CATEGORY_COLORS),
+        total_plotted=len(places),
+        failed_count=failed_count,
     )
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)

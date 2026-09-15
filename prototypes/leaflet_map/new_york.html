@@ -23,14 +23,18 @@
     display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none;
   }
   .filters hr { border: none; border-top: 1px solid #ddd; margin: 8px 0; }
-  .count { color: #888; font-size: 11px; }
+  .stats { font-size: 12px; color: #333; margin-bottom: 4px; }
+  .stats.failed { color: #888; margin-bottom: 8px; }
+  .popup-link { display: inline-block; margin-top: 4px; }
 </style>
 </head>
 <body>
 <div id="map"></div>
 <script>
-  const places = [{"title": "56 Bogart St", "lat": 40.705865, "lon": -73.9331729, "category": "Arts/Studios/Event Spaces", "neighborhood": "Brooklyn", "cuisine": ""}, {"title": "EDEN (Eden Gallery) - SoHo", "lat": 40.7226991, "lon": -74.0014366, "category": "Galleries", "neighborhood": "Little Italy", "cuisine": ""}, {"title": "EDEN", "lat": 40.8443436, "lon": -73.9147452, "category": "Other/Uncategorized", "neighborhood": "The Bronx", "cuisine": ""}, {"title": "Eric Firestone Gallery", "lat": 40.7269555, "lon": -73.9926816, "category": "Galleries", "neighborhood": "NoHo", "cuisine": ""}, {"title": "Hall des Lumi\u00e8res", "lat": 40.713744, "lon": -74.005072, "category": "Museums/Cultural Institutions", "neighborhood": "Civic Center", "cuisine": ""}, {"title": "Jeffrey Deitch", "lat": 40.7219434, "lon": -74.002655, "category": "Galleries", "neighborhood": "Little Italy", "cuisine": ""}, {"title": "Klom Klorm", "lat": 40.7031166, "lon": -73.9170639, "category": "Dining", "neighborhood": "Bushwick", "cuisine": "Thai"}, {"title": "Tabar\u00e9 Bushwick", "lat": 40.7038002, "lon": -73.93073, "category": "Dining", "neighborhood": "Bushwick", "cuisine": "Uruguayan"}];
+  const places = [{"title": "56 Bogart St", "lat": 40.705865, "lon": -73.9331729, "category": "Arts/Studios/Event Spaces", "neighborhood": "Brooklyn", "cuisine": "", "url": "https://www.google.com/maps/place/56+Bogart+St/data=!4m2!3m1!1s0x89c25c00fe4119ad:0x80bfea2c85bf1071"}, {"title": "EDEN (Eden Gallery) - SoHo", "lat": 40.7226991, "lon": -74.0014366, "category": "Galleries", "neighborhood": "Little Italy", "cuisine": "", "url": "https://www.google.com/maps/place/EDEN+(Eden+Gallery)+-+SoHo/data=!4m2!3m1!1s0x89c2598bf0b2abfb:0x1b3d2bffdb898257"}, {"title": "EDEN", "lat": 40.8443436, "lon": -73.9147452, "category": "Other/Uncategorized", "neighborhood": "The Bronx", "cuisine": "", "url": "https://www.google.com/maps/place/EDEN/data=!4m2!3m1!1s0x89c259dd7a4a8c93:0x7c2b3dc079b739b4"}, {"title": "Eric Firestone Gallery", "lat": 40.7269555, "lon": -73.9926816, "category": "Galleries", "neighborhood": "NoHo", "cuisine": "", "url": "https://www.google.com/maps/place/Eric+Firestone+Gallery/data=!4m2!3m1!1s0x89c2599abb1f6e61:0xc572f82c6f4568f7"}, {"title": "Hall des Lumi\u00e8res", "lat": 40.713744, "lon": -74.005072, "category": "Museums/Cultural Institutions", "neighborhood": "Civic Center", "cuisine": "", "url": "https://www.google.com/maps/place/Hall+des+Lumi%C3%A8res/data=!4m2!3m1!1s0x89c25bc6f59bb035:0xd3737b4399aaac7f"}, {"title": "Jeffrey Deitch", "lat": 40.7219434, "lon": -74.002655, "category": "Galleries", "neighborhood": "Little Italy", "cuisine": "", "url": "https://www.google.com/maps/place/Jeffrey+Deitch/data=!4m2!3m1!1s0x89c2598baf3f6075:0x882ac0d144e4013e"}, {"title": "Klom Klorm", "lat": 40.7031166, "lon": -73.9170639, "category": "Dining", "neighborhood": "Bushwick", "cuisine": "Thai", "url": "https://www.google.com/maps/place/Klom+Klorm/data=!4m2!3m1!1s0x89c25d6d41e21593:0x94c6ae1d6f2e1176"}, {"title": "Tabar\u00e9 Bushwick", "lat": 40.7038002, "lon": -73.93073, "category": "Dining", "neighborhood": "Bushwick", "cuisine": "Uruguayan", "url": "https://www.google.com/maps/place/Tabar%C3%A9+Bushwick/data=!4m2!3m1!1s0x89c25d44cc8e45f3:0x196703290192315e"}];
   const colors = {"Dining": "#e74c3c", "Coffee/Bakery": "#935116", "Bars/Nightlife": "#8e44ad", "Galleries": "#2980b9", "Museums/Cultural Institutions": "#16a085", "Arts/Studios/Event Spaces": "#d35400", "Shops/Retail": "#f1c40f", "Parks/Outdoors": "#27ae60", "Other/Uncategorized": "#7f8c8d"};
+  const totalPlotted = 8;
+  const failedCount = 10;
 
   const categories = [...new Set(places.map(p => p.category))].sort();
   const neighborhoods = [...new Set(places.map(p => p.neighborhood).filter(Boolean))].sort();
@@ -52,7 +56,10 @@
       radius: 7, color: color, fillColor: color, fillOpacity: 0.85, weight: 1,
     });
     const cuisineLine = p.cuisine ? `<br>${p.cuisine} cuisine` : '';
-    marker.bindPopup(`<b>${p.title}</b><br>${p.category}${cuisineLine}<br>${p.neighborhood || ''}`);
+    const mapsLink = p.url
+      ? `<br><a class="popup-link" href="${p.url}" target="_blank" rel="noopener">View on Google Maps</a>`
+      : '';
+    marker.bindPopup(`<b>${p.title}</b><br>${p.category}${cuisineLine}<br>${p.neighborhood || ''}${mapsLink}`);
     return { marker, place: p };
   });
 
@@ -76,6 +83,8 @@
 
   function refresh() {
     const bounds = applyFilters();
+    const statsEl = document.getElementById('stats-count');
+    if (statsEl) statsEl.textContent = `Showing ${bounds.length} of ${totalPlotted} places`;
     if (bounds.length) { map.fitBounds(bounds, { padding: [30, 30] }); }
     else { map.setView([40.7128, -74.0060], 12); }
   }
@@ -116,6 +125,14 @@
     const div = L.DomUtil.create('div', 'filters');
     L.DomEvent.disableClickPropagation(div);
     L.DomEvent.disableScrollPropagation(div);
+    const stats = L.DomUtil.create('div', 'stats', div);
+    stats.id = 'stats-count';
+    stats.textContent = `Showing ${totalPlotted} of ${totalPlotted} places`;
+    if (failedCount > 0) {
+      const failedLine = L.DomUtil.create('div', 'stats failed', div);
+      failedLine.textContent = `${failedCount} more failed to geocode (not shown)`;
+    }
+    div.appendChild(document.createElement('hr'));
     div.appendChild(buildFilterGroup('Category', categories, activeCategories, c => colors[c] || '#333'));
     div.appendChild(document.createElement('hr'));
     div.appendChild(buildFilterGroup('Neighborhood', neighborhoods, activeNeighborhoods, null));
