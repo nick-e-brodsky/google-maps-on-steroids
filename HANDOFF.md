@@ -1,4 +1,4 @@
-# Handoff — 2026-09-15
+# Handoff — 2026-09-15 (updated)
 
 Session-to-session continuity note. Read this first, then `README.md` (pipeline
 usage) and `decisions/` (why things are built this way — start with the index
@@ -24,43 +24,32 @@ self-merge, token economy, etc.) — follow them without being reminded.
   deliberate, explicit tradeoff Nick chose after comparing alternatives;
   don't re-litigate it without him raising it.
 
-## The blocker to fix first
+## The blocker that was fixed this session
 
-**10 of the 18 test places (56%) fail to geocode via Nominatim.** That's the
-literal reason this session ended and the next one exists — Nick called it a
-likely dealbreaker before any new features.
+**Was:** 10 of 18 test places (56%) failed to geocode via Nominatim alone —
+a real problem for the Leaflet map (the actual day-to-day surface), which
+has no geocoding of its own and just draws pins at coordinates it's handed.
 
-Important context `decisions/0002` doesn't fully capture: that ADR accepted
-Nominatim's weak coverage *because the plan at the time was for Google My
-Maps to do its own (much better) geocoding from Title at CSV-import time* —
-Nominatim's coordinates wouldn't even be needed. Since then, the project
-has shifted to the self-hosted Leaflet map above as the actual day-to-day
-surface. **Leaflet has no geocoding of its own — it only draws a pin at
-coordinates it's handed.** So the destination-does-its-own-geocoding escape
-hatch doesn't apply here, and the Nominatim gap is a real, unresolved
-problem for the surface actually being used, not a moot point.
+**Fix:** added the Google Geocoding API as a fallback (`src/lib/
+google_geocode.py`) — Nominatim tried first (free), Google only called for
+what it misses. Nick already had a key set up from a prior session. Re-ran
+the 18-place test list with the fallback: **0/18 failures now** (all 10
+previously-failed places resolved at high match confidence via Google).
+See `decisions/0005` for the full writeup; `decisions/0002` is superseded.
 
-`decisions/0002` already names the fallback that was deferred: the **Google
-Geocoding API**. Nick was walked through key setup (Cloud Console project,
-enable Geocoding API, billing, restrict the key to that API only) earlier
-in the prior session, but **it's unconfirmed whether a key actually exists
-yet** — ask him before assuming.
+One pre-existing low-confidence match remains (bare "EDEN" title matching
+a Bronx street) — that's a title-ambiguity issue, not a coverage gap, so
+the fallback doesn't and shouldn't fix it. Flagged as before for manual
+review.
 
 ## Next task
 
-1. Confirm whether Nick has a Google Geocoding API key. If not, the setup
-   steps were already given once — regenerate them if needed rather than
-   assuming he remembers.
-2. Wire it in as a fallback (try Nominatim first since it's free; fall back
-   to Google for anything Nominatim misses) — ask Nick if he'd rather
-   replace Nominatim outright instead. Keep the key out of git (local
-   env var / gitignored file), obviously.
-3. Re-run against the 18-place test list and confirm the failure rate
-   actually drops before treating this as solved — don't just assume the
-   integration works.
-4. Update `decisions/0002` to reflect the real outcome (it currently
-   documents this as deferred/open).
-5. Only after that: ask Nick for the full 150+ place list.
+Ask Nick for the full 150+ place list and run the now-fixed pipeline
+against it. Watch for:
+- Whether the 0% failure rate on 18 places holds at scale (more
+  small/newer businesses could still slip past both providers).
+- Google API cost — should stay near-zero since it's a fallback, but worth
+  a sanity check with `source` counts in `state.json` after a full run.
 
 ## Loose ends (not urgent, don't chase unless asked)
 

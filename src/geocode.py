@@ -26,7 +26,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import paths
 from lib import state as state_lib
 from lib import categorize
-from lib.nominatim import search, GeocodeError
+from lib.nominatim import search as nominatim_search, GeocodeError
+from lib import google_geocode
 
 
 def _pick(address: dict, *keys: str) -> str | None:
@@ -65,6 +66,8 @@ HIGH_CONFIDENCE_ADDRESSTYPES = {
 
 
 def _match_confidence(result: dict) -> str:
+    if result.get("_source") == "google":
+        return result["_google_match_confidence"]
     return "high" if result.get("addresstype") in HIGH_CONFIDENCE_ADDRESSTYPES else "low"
 
 
@@ -81,18 +84,40 @@ def read_rows(csv_path: str) -> list[dict]:
     return rows
 
 
+def _viewbox_to_google_bounds(viewbox: str | None) -> str | None:
+    """Nominatim viewbox is "left,top,right,bottom" (lon,lat,lon,lat).
+    Google bounds is "south,west|north,east" (lat,lon|lat,lon)."""
+    if not viewbox:
+        return None
+    left, top, right, bottom = (float(v) for v in viewbox.split(","))
+    return f"{bottom},{left}|{top},{right}"
+
+
 def geocode_one(title: str, query_suffix: str, viewbox: str | None) -> tuple[dict | None, str | None]:
-    """Try a couple of query variants. Returns (result, error)."""
+    """Try Nominatim first (free), then fall back to the Google Geocoding
+    API (paid) for anything Nominatim can't find. Returns (result, error).
+    """
     queries = [f"{title}, {query_suffix}", title]
     last_error = None
     for q in queries:
         try:
-            results = search(q, viewbox=viewbox)
+            results = nominatim_search(q, viewbox=viewbox)
         except GeocodeError as exc:
             last_error = str(exc)
             continue
         if results:
             return results[0], None
+
+    bounds = _viewbox_to_google_bounds(viewbox)
+    for q in queries:
+        try:
+            results = google_geocode.search(q, bounds=bounds)
+        except google_geocode.GeocodeError as exc:
+            last_error = str(exc)
+            continue
+        if results:
+            return google_geocode.to_nominatim_shape(results[0]), None
+
     return None, last_error or "no results"
 
 
@@ -163,6 +188,7 @@ def main():
                 title, tags, osm_category, osm_type, overrides_path=overrides_path,
             )
             match_confidence = _match_confidence(result)
+            source = result.get("_source", "nominatim")
             record.update({
                 "status": "success",
                 "error": None,
@@ -176,9 +202,10 @@ def main():
                 "category": category,
                 "category_confidence": confidence,
                 "match_confidence": match_confidence,
+                "source": source,
             })
             flag = "" if match_confidence == "high" else "  [LOW MATCH CONFIDENCE - verify]"
-            print(f"OK -> {record['address']} [{category}/{confidence}]{flag}")
+            print(f"OK ({source}) -> {record['address']} [{category}/{confidence}]{flag}")
 
         state[key] = record
         state_lib.save(state, state_path)

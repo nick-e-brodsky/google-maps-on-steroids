@@ -21,6 +21,7 @@ data/<location>/
 
 ```
 python3 -m pip install -r requirements.txt
+export GOOGLE_MAPS_API_KEY=...  # used as a fallback for Nominatim misses
 
 # 1. Export a Google Maps saved list via Google Takeout ("Saved" export)
 #    and drop the CSV into data/<location>/input/.
@@ -97,24 +98,31 @@ Other/Uncategorized. This is best-effort, not ground truth — check
 entries here always win, and `src/export.py` re-applies overrides on every
 run without re-geocoding).
 
-## Geocoding source: Nominatim (OpenStreetMap)
+## Geocoding source: Nominatim (OpenStreetMap), with a Google fallback
 
-Uses the free public Nominatim API — no key/account needed. Rate-limited to
-~1 req/sec per Nominatim's usage policy, with retry/backoff on transient
-failures (useful over flaky connections). Searches are bounded to each
-location's `viewbox` to avoid false-positive matches on same-named places
-elsewhere (e.g. a business called "EDEN" matching a town upstate instead of
-the SoHo gallery).
+Tries the free public Nominatim API first — no key/account needed,
+rate-limited to ~1 req/sec per Nominatim's usage policy, with retry/backoff
+on transient failures. Searches are bounded to each location's `viewbox`
+to avoid false-positive matches on same-named places elsewhere (e.g. a
+business called "EDEN" matching a town upstate instead of the SoHo
+gallery).
 
 **Known limitation:** Nominatim's coverage of small/newer businesses
 (galleries, boutique studios, etc.) is noticeably weaker than Google's. On
-an 18-place NYC test batch, ~56% failed to geocode at all (no result found),
-and one further match landed on a generic street name rather than the
-actual venue (flagged in output as `match_confidence: low`). If this
-failure rate holds on the full list, the documented fallback is the Google
-Places API (requires generating an API key via Google Cloud Console — not
-set up here, since it needs a separate conversation about credential
-storage).
+an 18-place NYC test batch, ~56% failed to geocode at all via Nominatim
+alone. Anything Nominatim misses is retried against the **Google Geocoding
+API** (`src/lib/google_geocode.py`) — this brought the same test batch to
+0% failures. Google costs money per lookup, so it's only called for
+Nominatim's misses, not every place. Requires `GOOGLE_MAPS_API_KEY` set in
+the environment (get one via Google Cloud Console: create a project,
+enable the Geocoding API, enable billing, restrict the key to that API).
+Never commit the key — export it as a shell env var or put it in a
+gitignored `.env` you source yourself.
+
+One further Nominatim match landed on a generic street name rather than
+the actual venue (flagged in output as `match_confidence: low`) — a
+title-ambiguity issue (bare "EDEN"), not a coverage gap, so the fallback
+doesn't fix it; verify those by hand.
 
 Failed and low-confidence matches are called out in `src/export.py`'s
 summary output and left out of `places.csv` (failures) or flagged in the
