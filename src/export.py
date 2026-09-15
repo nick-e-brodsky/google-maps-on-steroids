@@ -16,6 +16,7 @@ Usage:
 
 import argparse
 import csv
+import json
 import os
 import sys
 
@@ -25,7 +26,14 @@ from lib import paths
 from lib import state as state_lib
 from lib import categorize
 
-FIELDS = ["Title", "Category", "Neighborhood", "Address", "Lat", "Long", "Original_URL"]
+FIELDS = ["Title", "Category", "Neighborhood", "Cuisine", "Address", "Lat", "Long", "Original_URL"]
+
+
+def load_cuisine(path: str) -> dict:
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def main():
@@ -36,6 +44,7 @@ def main():
     state_path = paths.state_path(args.location)
     overrides_path = paths.overrides_path(args.location)
     output_path = paths.output_path(args.location)
+    cuisine = load_cuisine(paths.cuisine_path(args.location))
 
     state = state_lib.load(state_path)
     if not state:
@@ -68,6 +77,7 @@ def main():
             "Title": title,
             "Category": category,
             "Neighborhood": record.get("neighborhood", ""),
+            "Cuisine": cuisine.get(title, ""),
             "Address": record.get("address", ""),
             "Lat": record.get("lat", ""),
             "Long": record.get("lon", ""),
@@ -101,6 +111,13 @@ def main():
         print(f"\n{len(low_match_confidence)} place(s) matched a generic street/area "
               f"rather than a specific venue - verify these manually:")
         for title in low_match_confidence:
+            print(f"  - {title}")
+
+    missing_cuisine = [r["Title"] for r in rows if r["Category"] == "Dining" and not r["Cuisine"]]
+    if missing_cuisine:
+        print(f"\n{len(missing_cuisine)} Dining place(s) missing cuisine - add to "
+              f"{paths.cuisine_path(args.location)}:")
+        for title in missing_cuisine:
             print(f"  - {title}")
 
 

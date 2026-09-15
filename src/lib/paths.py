@@ -23,5 +23,9 @@ def config_path(location: str) -> str:
     return os.path.join(data_dir(location), "config.json")
 
 
+def cuisine_path(location: str) -> str:
+    return os.path.join(data_dir(location), "cuisine.json")
+
+
 def output_path(location: str) -> str:
     return os.path.join(data_dir(location), "output", "places.csv")
