@@ -1,6 +1,6 @@
 # 0002: Geocode via the destination map tool, not a pre-resolved Nominatim pipeline
 
-Status: Accepted (direction); which destination tool is still open, see below
+Status: Superseded by 0005
 Date: 2026-09-11
 
 ## Context
