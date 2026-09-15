@@ -33,3 +33,4 @@ What this makes easier/harder, what it leaves open.
 1. [Category & neighborhood via lightweight heuristic, not an external API](0001-category-neighborhood-heuristic.md)
 2. [Geocode via the destination map tool, not a pre-resolved Nominatim pipeline](0002-geocode-via-destination-tool.md)
 3. [Output organized per-location, split by neighborhood](0003-output-per-location-per-neighborhood.md)
+4. [Make the repo public, host the map via GitHub Pages](0004-public-repo-github-pages.md)
