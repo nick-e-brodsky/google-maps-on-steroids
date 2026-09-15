@@ -8,21 +8,31 @@
 <style>
   html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
   #map { height: 100%; }
-  .legend {
-    background: white; padding: 8px 10px; border-radius: 4px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 13px; line-height: 1.6;
+  .filters {
+    background: white; padding: 10px 12px; border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 13px; line-height: 1.5;
+    max-height: 70vh; overflow-y: auto; width: 220px;
   }
-  .legend .swatch {
-    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
-    margin-right: 6px;
+  .filters h4 { margin: 4px 0 4px; font-size: 12px; text-transform: uppercase;
+    color: #555; display: flex; justify-content: space-between; align-items: center; }
+  .filters .toggle-all { font-size: 11px; font-weight: normal; text-transform: none;
+    color: #2980b9; cursor: pointer; text-decoration: underline; }
+  .filters label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .filters .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none;
   }
+  .filters hr { border: none; border-top: 1px solid #ddd; margin: 8px 0; }
+  .count { color: #888; font-size: 11px; }
 </style>
 </head>
 <body>
 <div id="map"></div>
 <script>
-  const places = [{"title": "56 Bogart St", "lat": 40.705865, "lon": -73.9331729, "category": "Other/Uncategorized", "neighborhood": "Brooklyn"}, {"title": "EDEN (Eden Gallery) - SoHo", "lat": 40.7226991, "lon": -74.0014366, "category": "Galleries", "neighborhood": "Little Italy"}, {"title": "EDEN", "lat": 40.8443436, "lon": -73.9147452, "category": "Other/Uncategorized", "neighborhood": "The Bronx"}, {"title": "Eric Firestone Gallery", "lat": 40.7269555, "lon": -73.9926816, "category": "Galleries", "neighborhood": "NoHo"}, {"title": "Hall des Lumi\u00e8res", "lat": 40.713744, "lon": -74.005072, "category": "Museums/Cultural Institutions", "neighborhood": "Civic Center"}, {"title": "Jeffrey Deitch", "lat": 40.7219434, "lon": -74.002655, "category": "Galleries", "neighborhood": "Little Italy"}, {"title": "Klom Klorm", "lat": 40.7031166, "lon": -73.9170639, "category": "Dining", "neighborhood": "Bushwick"}, {"title": "Tabar\u00e9 Bushwick", "lat": 40.7038002, "lon": -73.93073, "category": "Dining", "neighborhood": "Bushwick"}];
+  const places = [{"title": "56 Bogart St", "lat": 40.705865, "lon": -73.9331729, "category": "Arts/Studios/Event Spaces", "neighborhood": "Brooklyn", "cuisine": ""}, {"title": "EDEN (Eden Gallery) - SoHo", "lat": 40.7226991, "lon": -74.0014366, "category": "Galleries", "neighborhood": "Little Italy", "cuisine": ""}, {"title": "EDEN", "lat": 40.8443436, "lon": -73.9147452, "category": "Other/Uncategorized", "neighborhood": "The Bronx", "cuisine": ""}, {"title": "Eric Firestone Gallery", "lat": 40.7269555, "lon": -73.9926816, "category": "Galleries", "neighborhood": "NoHo", "cuisine": ""}, {"title": "Hall des Lumi\u00e8res", "lat": 40.713744, "lon": -74.005072, "category": "Museums/Cultural Institutions", "neighborhood": "Civic Center", "cuisine": ""}, {"title": "Jeffrey Deitch", "lat": 40.7219434, "lon": -74.002655, "category": "Galleries", "neighborhood": "Little Italy", "cuisine": ""}, {"title": "Klom Klorm", "lat": 40.7031166, "lon": -73.9170639, "category": "Dining", "neighborhood": "Bushwick", "cuisine": "Thai"}, {"title": "Tabar\u00e9 Bushwick", "lat": 40.7038002, "lon": -73.93073, "category": "Dining", "neighborhood": "Bushwick", "cuisine": "Uruguayan"}];
   const colors = {"Dining": "#e74c3c", "Coffee/Bakery": "#935116", "Bars/Nightlife": "#8e44ad", "Galleries": "#2980b9", "Museums/Cultural Institutions": "#16a085", "Arts/Studios/Event Spaces": "#d35400", "Shops/Retail": "#f1c40f", "Parks/Outdoors": "#27ae60", "Other/Uncategorized": "#7f8c8d"};
+
+  const categories = [...new Set(places.map(p => p.category))].sort();
+  const neighborhoods = [...new Set(places.map(p => p.neighborhood).filter(Boolean))].sort();
 
   const map = L.map('map');
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -30,31 +40,80 @@
     maxZoom: 19,
   }).addTo(map);
 
-  const bounds = [];
-  const usedCategories = new Set();
-  places.forEach(p => {
+  const activeCategories = new Set(categories);
+  const activeNeighborhoods = new Set(neighborhoods);
+
+  const markers = places.map(p => {
     const color = colors[p.category] || '#333';
-    usedCategories.add(p.category);
     const marker = L.circleMarker([p.lat, p.lon], {
       radius: 7, color: color, fillColor: color, fillOpacity: 0.85, weight: 1,
-    }).addTo(map);
-    marker.bindPopup(`<b>${p.title}</b><br>${p.category}<br>${p.neighborhood || ''}`);
-    bounds.push([p.lat, p.lon]);
-  });
-  if (bounds.length) { map.fitBounds(bounds, { padding: [30, 30] }); }
-  else { map.setView([40.7128, -74.0060], 12); }
-
-  const legend = L.control({ position: 'bottomright' });
-  legend.onAdd = function() {
-    const div = L.DomUtil.create('div', 'legend');
-    let html = '<b>Category</b><br>';
-    [...usedCategories].sort().forEach(cat => {
-      html += `<span class="swatch" style="background:${colors[cat] || '#333'}"></span>${cat}<br>`;
     });
-    div.innerHTML = html;
+    const cuisineLine = p.cuisine ? `<br>${p.cuisine} cuisine` : '';
+    marker.bindPopup(`<b>${p.title}</b><br>${p.category}${cuisineLine}<br>${p.neighborhood || ''}`);
+    return { marker, place: p };
+  });
+
+  function applyFilters() {
+    const bounds = [];
+    markers.forEach(({ marker, place }) => {
+      const visible = activeCategories.has(place.category) &&
+        (place.neighborhood === '' || activeNeighborhoods.has(place.neighborhood));
+      if (visible) {
+        if (!map.hasLayer(marker)) marker.addTo(map);
+        bounds.push([place.lat, place.lon]);
+      } else if (map.hasLayer(marker)) {
+        map.removeLayer(marker);
+      }
+    });
+    return bounds;
+  }
+
+  function buildFilterGroup(title, items, activeSet, colorFor) {
+    const div = L.DomUtil.create('div');
+    const header = L.DomUtil.create('h4', '', div);
+    header.innerHTML = `<span>${title}</span>`;
+    const toggle = L.DomUtil.create('span', 'toggle-all', header);
+    toggle.textContent = 'All / None';
+    toggle.onclick = () => {
+      const allOn = items.every(i => activeSet.has(i));
+      items.forEach(i => allOn ? activeSet.delete(i) : activeSet.add(i));
+      div.querySelectorAll('input').forEach(cb => cb.checked = !allOn);
+      applyFilters();
+    };
+    items.forEach(item => {
+      const label = L.DomUtil.create('label', '', div);
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.onchange = () => {
+        if (cb.checked) activeSet.add(item); else activeSet.delete(item);
+        applyFilters();
+      };
+      label.appendChild(cb);
+      if (colorFor) {
+        const sw = L.DomUtil.create('span', 'swatch', label);
+        sw.style.background = colorFor(item);
+      }
+      label.appendChild(document.createTextNode(item));
+    });
+    return div;
+  }
+
+  const filterControl = L.control({ position: 'topright' });
+  filterControl.onAdd = function() {
+    const div = L.DomUtil.create('div', 'filters');
+    L.DomEvent.disableClickPropagation(div);
+    L.DomEvent.disableScrollPropagation(div);
+    div.appendChild(buildFilterGroup('Category', categories, activeCategories, c => colors[c] || '#333'));
+    div.appendChild(document.createElement('hr'));
+    div.appendChild(buildFilterGroup('Neighborhood', neighborhoods, activeNeighborhoods, null));
     return div;
   };
-  legend.addTo(map);
+  filterControl.addTo(map);
+
+  const bounds = applyFilters();
+  if (bounds.length) { map.fitBounds(bounds, { padding: [30, 30] }); }
+  else { map.setView([40.7128, -74.0060], 12); }
 </script>
 </body>
 </html>
