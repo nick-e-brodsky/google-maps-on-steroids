@@ -44,6 +44,7 @@ HTML_TEMPLATE = """<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>{location} - Leaflet prototype</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -53,7 +54,7 @@ HTML_TEMPLATE = """<!doctype html>
   .filters {{
     background: white; padding: 10px 12px; border-radius: 6px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 13px; line-height: 1.5;
-    max-height: 70vh; overflow-y: auto; width: 220px;
+    max-height: 60vh; overflow-y: auto; width: 220px; max-width: calc(100vw - 20px);
   }}
   .filters h4 {{ margin: 4px 0 4px; font-size: 12px; text-transform: uppercase;
     color: #555; display: flex; justify-content: space-between; align-items: center; }}
