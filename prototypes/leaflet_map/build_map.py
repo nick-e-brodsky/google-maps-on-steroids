@@ -64,6 +64,20 @@ HTML_TEMPLATE = """<!doctype html>
   .filters .toggle-all {{ font-size: 11px; font-weight: normal; text-transform: none;
     color: #2980b9; cursor: pointer; text-decoration: underline; }}
   .filters label {{ display: flex; align-items: center; gap: 6px; cursor: pointer; }}
+  .search-wrap {{ position: relative; margin-bottom: 8px; }}
+  .search-input {{
+    width: 100%; box-sizing: border-box; padding: 5px 6px; font-size: 13px;
+    border: 1px solid #ccc; border-radius: 4px;
+  }}
+  .search-results {{
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 1000;
+    background: white; border: 1px solid #ccc; border-top: none;
+    max-height: 160px; overflow-y: auto; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  }}
+  .search-results div {{ padding: 4px 8px; font-size: 13px; cursor: pointer; }}
+  .search-results div:hover {{ background: #f0f0f0; }}
+  .search-results .search-no-match {{ color: #888; cursor: default; }}
+  .search-results .search-no-match:hover {{ background: none; }}
   .filters .swatch {{
     display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none;
   }}
@@ -201,6 +215,73 @@ HTML_TEMPLATE = """<!doctype html>
     toggle.onclick = () => div.classList.toggle('collapsed');
 
     const body = L.DomUtil.create('div', 'filters-body', div);
+
+    // Search matches against ALL places regardless of active category/
+    // neighborhood/cuisine filters (so "where's the place I saved called X"
+    // always works, even if a filter is currently hiding it). Selecting a
+    // result just temporarily shows that one marker via zoomToShowLayer -
+    // it does NOT change filter state or checkbox UI, so the next filter
+    // interaction (or a call to refresh()) will hide it again if it
+    // doesn't match the active filters. This keeps search simple (no
+    // syncing checkboxes to filter state) while never failing to find a
+    // saved place by name.
+    const searchWrap = L.DomUtil.create('div', 'search-wrap', body);
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'search-input';
+    searchInput.placeholder = 'Search places by name…';
+    searchWrap.appendChild(searchInput);
+    const searchResults = L.DomUtil.create('div', 'search-results', searchWrap);
+    searchResults.style.display = 'none';
+
+    function hideSearchResults() {{
+      searchResults.style.display = 'none';
+      searchResults.innerHTML = '';
+    }}
+
+    function selectSearchResult(place) {{
+      const entry = markers.find(m => m.place === place);
+      if (!entry) return;
+      if (!clusterGroup.hasLayer(entry.marker)) clusterGroup.addLayer(entry.marker);
+      clusterGroup.zoomToShowLayer(entry.marker, () => entry.marker.openPopup());
+      searchInput.value = '';
+      hideSearchResults();
+    }}
+
+    searchInput.addEventListener('input', () => {{
+      const q = searchInput.value.trim().toLowerCase();
+      if (!q) {{ hideSearchResults(); return; }}
+      const matches = places.filter(p => p.title.toLowerCase().includes(q)).slice(0, 8);
+      searchResults.innerHTML = '';
+      if (!matches.length) {{
+        const none = document.createElement('div');
+        none.className = 'search-no-match';
+        none.textContent = 'No matches';
+        searchResults.appendChild(none);
+      }} else {{
+        matches.forEach(p => {{
+          const item = document.createElement('div');
+          item.textContent = p.title;
+          item.onclick = () => selectSearchResult(p);
+          searchResults.appendChild(item);
+        }});
+      }}
+      searchResults.style.display = 'block';
+    }});
+
+    searchInput.addEventListener('keydown', (e) => {{
+      if (e.key === 'Escape') {{
+        searchInput.value = '';
+        hideSearchResults();
+        searchInput.blur();
+      }} else if (e.key === 'Enter') {{
+        const q = searchInput.value.trim().toLowerCase();
+        if (!q) return;
+        const match = places.find(p => p.title.toLowerCase().includes(q));
+        if (match) selectSearchResult(match);
+      }}
+    }});
+
     const stats = L.DomUtil.create('div', 'stats', body);
     stats.id = 'stats-count';
     stats.textContent = `Showing ${{totalPlotted}} of ${{totalPlotted}} places`;
