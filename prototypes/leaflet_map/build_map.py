@@ -108,6 +108,7 @@ HTML_TEMPLATE = """<!doctype html>
   const colors = {colors_json};
   const totalPlotted = {total_plotted};
   const failedCount = {failed_count};
+  const coreBbox = {core_bbox_json};
 
   const categories = [...new Set(places.map(p => p.category))].sort();
   const neighborhoods = [...new Set(places.map(p => p.neighborhood).filter(Boolean))].sort();
@@ -166,11 +167,24 @@ HTML_TEMPLATE = """<!doctype html>
     return bounds;
   }}
 
+  // A few legitimately-geocoded places (e.g. upstate day trips) sit far
+  // outside the city proper; including them in fitBounds would zoom out
+  // so far that the dense in-city markers collapse into one cluster. Fit
+  // to the places inside the location's core viewbox when possible - the
+  // rest stay plotted and reachable by panning/zooming out manually.
+  function inCoreBbox([lat, lon]) {{
+    if (!coreBbox) return true;
+    return lon >= coreBbox.west && lon <= coreBbox.east &&
+      lat >= coreBbox.south && lat <= coreBbox.north;
+  }}
+
   function refresh() {{
     const bounds = applyFilters();
     const statsEl = document.getElementById('stats-count');
     if (statsEl) statsEl.textContent = `Showing ${{bounds.length}} of ${{totalPlotted}} places`;
-    if (bounds.length) {{ map.fitBounds(bounds, {{ padding: [30, 30] }}); }}
+    const coreBounds = bounds.filter(inCoreBbox);
+    const fitTo = coreBounds.length ? coreBounds : bounds;
+    if (fitTo.length) {{ map.fitBounds(fitTo, {{ padding: [30, 30] }}); }}
     else {{ map.setView([40.7128, -74.0060], 12); }}
   }}
 
@@ -339,6 +353,17 @@ def main():
     state = state_lib.load(paths.state_path(args.location))
     overrides_path = paths.overrides_path(args.location)
 
+    core_bbox = None
+    config_file = paths.config_path(args.location)
+    if os.path.exists(config_file):
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        viewbox = config.get("viewbox")
+        if viewbox:
+            # "left,top,right,bottom" (Nominatim's viewbox format).
+            left, top, right, bottom = (float(x) for x in viewbox.split(","))
+            core_bbox = {"west": left, "south": bottom, "east": right, "north": top}
+
     cuisine_file = paths.cuisine_path(args.location)
     cuisine = {}
     if os.path.exists(cuisine_file):
@@ -376,6 +401,7 @@ def main():
         colors_json=json.dumps(CATEGORY_COLORS),
         total_plotted=len(places),
         failed_count=failed_count,
+        core_bbox_json=json.dumps(core_bbox),
     )
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
