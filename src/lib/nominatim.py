@@ -9,6 +9,7 @@ import time
 import requests
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
 USER_AGENT = (
     "google-maps-on-steroids/0.1 "
     "(personal travel-list geocoding tool; contact: nick.e.brodsky@gmail.com)"
@@ -78,6 +79,57 @@ def search(query: str, viewbox: str | None = None) -> list[dict]:
                 last_error = GeocodeError(f"server error ({resp.status_code})")
             else:
                 # Non-retriable client error (e.g. 400) - fail fast.
+                raise GeocodeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
+
+        if attempt < MAX_ATTEMPTS:
+            time.sleep(BACKOFF_BASE * (2 ** (attempt - 1)))
+
+    raise GeocodeError(f"exhausted {MAX_ATTEMPTS} attempts: {last_error}")
+
+
+def reverse(lat: float, lon: float) -> dict | None:
+    """Reverse geocode (lat, lon) via Nominatim. Retries transient failures
+    with backoff. Returns None if Nominatim has no result for the point.
+
+    Used to backfill a proper OSM neighbourhood/suburb/quarter tag for
+    places resolved via the Google fallback, whose own locality component
+    is often borough-level (see decisions/ for why).
+
+    Raises GeocodeError if all attempts are exhausted.
+    """
+    params = {
+        "lat": lat,
+        "lon": lon,
+        "format": "jsonv2",
+        "addressdetails": 1,
+        "zoom": 18,
+    }
+
+    last_error = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        _throttle()
+        try:
+            resp = requests.get(
+                NOMINATIM_REVERSE_URL,
+                params=params,
+                headers={"User-Agent": USER_AGENT},
+                timeout=20,
+            )
+        except requests.RequestException as exc:
+            last_error = exc
+        else:
+            if resp.status_code == 200:
+                try:
+                    data = resp.json()
+                except ValueError as exc:
+                    last_error = exc
+                else:
+                    return None if "error" in data else data
+            elif resp.status_code == 429:
+                last_error = GeocodeError("rate limited (429)")
+            elif 500 <= resp.status_code < 600:
+                last_error = GeocodeError(f"server error ({resp.status_code})")
+            else:
                 raise GeocodeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
 
         if attempt < MAX_ATTEMPTS:
