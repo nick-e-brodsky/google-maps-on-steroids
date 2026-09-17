@@ -26,6 +26,10 @@
     display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none;
   }
   .filters hr { border: none; border-top: 1px solid #ddd; margin: 8px 0; }
+  .filters .filter-search {
+    display: block; width: 100%; box-sizing: border-box; margin: 2px 0 6px;
+    padding: 4px 6px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px;
+  }
   .stats { font-size: 12px; color: #333; margin-bottom: 4px; }
   .stats.failed { color: #888; margin-bottom: 8px; }
   .popup-link { display: inline-block; margin-top: 4px; }
@@ -114,6 +118,8 @@
     else { map.setView([40.7128, -74.0060], 12); }
   }
 
+  const FILTER_SEARCH_THRESHOLD = 12;
+
   function buildFilterGroup(title, items, activeSet, colorFor) {
     const div = L.DomUtil.create('div');
     const header = L.DomUtil.create('h4', '', div);
@@ -126,6 +132,19 @@
       div.querySelectorAll('input').forEach(cb => cb.checked = !allOn);
       refresh();
     };
+    if (items.length > FILTER_SEARCH_THRESHOLD) {
+      const search = document.createElement('input');
+      search.type = 'text';
+      search.className = 'filter-search';
+      search.placeholder = `Search ${title.toLowerCase()}...`;
+      search.oninput = () => {
+        const q = search.value.trim().toLowerCase();
+        div.querySelectorAll('label').forEach(label => {
+          label.style.display = label.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+      };
+      div.appendChild(search);
+    }
     items.forEach(item => {
       const label = L.DomUtil.create('label', '', div);
       const cb = document.createElement('input');
