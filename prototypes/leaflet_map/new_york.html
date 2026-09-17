@@ -26,6 +26,16 @@
   .stats { font-size: 12px; color: #333; margin-bottom: 4px; }
   .stats.failed { color: #888; margin-bottom: 8px; }
   .popup-link { display: inline-block; margin-top: 4px; }
+  .filters-toggle { display: none; cursor: pointer; font-weight: 600; align-items: center;
+    justify-content: space-between; gap: 8px; }
+  .filters-toggle .chevron { font-size: 10px; transition: transform 0.15s; }
+  @media (max-width: 600px) {
+    .filters-toggle { display: flex; }
+    .filters.collapsed { width: auto; max-height: none; }
+    .filters.collapsed .filters-body { display: none; }
+    .filters:not(.collapsed) .filters-toggle .chevron { transform: rotate(180deg); }
+    .filters:not(.collapsed) .filters-toggle { margin-bottom: 6px; }
+  }
 </style>
 </head>
 <body>
@@ -122,23 +132,32 @@
 
   const filterControl = L.control({ position: 'topright' });
   filterControl.onAdd = function() {
-    const div = L.DomUtil.create('div', 'filters');
+    // Starts collapsed; only the media query above hides the body, so this
+    // is a no-op above 600px and the panel stays always-expanded there.
+    const div = L.DomUtil.create('div', 'filters collapsed');
     L.DomEvent.disableClickPropagation(div);
     L.DomEvent.disableScrollPropagation(div);
-    const stats = L.DomUtil.create('div', 'stats', div);
+
+    const toggle = L.DomUtil.create('div', 'filters-toggle', div);
+    L.DomUtil.create('span', '', toggle).textContent = 'Filters';
+    L.DomUtil.create('span', 'chevron', toggle).textContent = '▾';
+    toggle.onclick = () => div.classList.toggle('collapsed');
+
+    const body = L.DomUtil.create('div', 'filters-body', div);
+    const stats = L.DomUtil.create('div', 'stats', body);
     stats.id = 'stats-count';
     stats.textContent = `Showing ${totalPlotted} of ${totalPlotted} places`;
     if (failedCount > 0) {
-      const failedLine = L.DomUtil.create('div', 'stats failed', div);
+      const failedLine = L.DomUtil.create('div', 'stats failed', body);
       failedLine.textContent = `${failedCount} more failed to geocode (not shown)`;
     }
-    div.appendChild(document.createElement('hr'));
-    div.appendChild(buildFilterGroup('Category', categories, activeCategories, c => colors[c] || '#333'));
-    div.appendChild(document.createElement('hr'));
-    div.appendChild(buildFilterGroup('Neighborhood', neighborhoods, activeNeighborhoods, null));
+    body.appendChild(document.createElement('hr'));
+    body.appendChild(buildFilterGroup('Category', categories, activeCategories, c => colors[c] || '#333'));
+    body.appendChild(document.createElement('hr'));
+    body.appendChild(buildFilterGroup('Neighborhood', neighborhoods, activeNeighborhoods, null));
     if (cuisines.length) {
-      div.appendChild(document.createElement('hr'));
-      div.appendChild(buildFilterGroup('Cuisine', cuisines, activeCuisines, null));
+      body.appendChild(document.createElement('hr'));
+      body.appendChild(buildFilterGroup('Cuisine', cuisines, activeCuisines, null));
     }
     return div;
   };
