@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import paths
 from lib import state as state_lib
 from lib import categorize
-from lib.nominatim import search as nominatim_search, GeocodeError
+from lib.nominatim import search as nominatim_search, reverse as nominatim_reverse, GeocodeError
 from lib import google_geocode
 
 
@@ -116,9 +116,28 @@ def geocode_one(title: str, query_suffix: str, viewbox: str | None) -> tuple[dic
             last_error = str(exc)
             continue
         if results:
-            return google_geocode.to_nominatim_shape(results[0]), None
+            shaped = google_geocode.to_nominatim_shape(results[0])
+            _backfill_neighborhood(shaped)
+            return shaped, None
 
     return None, last_error or "no results"
+
+
+def _backfill_neighborhood(shaped: dict) -> None:
+    """Google's own locality component is often borough-level for NYC
+    addresses (see decisions/ for why) - a free Nominatim reverse lookup at
+    the resolved coordinates gets a proper OSM neighbourhood/suburb/quarter
+    tag instead. Best-effort: leaves Google's value in place on failure.
+    """
+    try:
+        reverse_result = nominatim_reverse(float(shaped["lat"]), float(shaped["lon"]))
+    except GeocodeError:
+        return
+    if reverse_result is None:
+        return
+    neighbourhood = _neighborhood(reverse_result)
+    if neighbourhood:
+        shaped["address"]["neighbourhood"] = neighbourhood
 
 
 def load_config(location: str) -> dict:
