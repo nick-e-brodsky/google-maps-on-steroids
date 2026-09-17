@@ -102,16 +102,25 @@ HTML_TEMPLATE = """<!doctype html>
   const activeNeighborhoods = new Set(neighborhoods);
   const activeCuisines = new Set(cuisines);
 
+  function escapeHtml(s) {{
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }}
+
   const markers = places.map(p => {{
     const color = colors[p.category] || '#333';
     const marker = L.circleMarker([p.lat, p.lon], {{
       radius: 7, color: color, fillColor: color, fillOpacity: 0.85, weight: 1,
     }});
-    const cuisineLine = p.cuisine ? `<br>${{p.cuisine}} cuisine` : '';
+    const cuisineLine = p.cuisine ? `<br>${{escapeHtml(p.cuisine)}} cuisine` : '';
     const mapsLink = p.url
-      ? `<br><a class="popup-link" href="${{p.url}}" target="_blank" rel="noopener">View on Google Maps</a>`
+      ? `<br><a class="popup-link" href="${{escapeHtml(p.url)}}" target="_blank" rel="noopener">View on Google Maps</a>`
       : '';
-    marker.bindPopup(`<b>${{p.title}}</b><br>${{p.category}}${{cuisineLine}}<br>${{p.neighborhood || ''}}${{mapsLink}}`);
+    marker.bindPopup(`<b>${{escapeHtml(p.title)}}</b><br>${{escapeHtml(p.category)}}${{cuisineLine}}<br>${{escapeHtml(p.neighborhood || '')}}${{mapsLink}}`);
     return {{ marker, place: p }};
   }});
 
