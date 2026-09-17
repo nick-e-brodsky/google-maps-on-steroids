@@ -6,6 +6,9 @@
 <title>new_york - Leaflet prototype</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
   html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
   #map { height: 100%; }
@@ -56,6 +59,9 @@
     maxZoom: 19,
   }).addTo(map);
 
+  const clusterGroup = L.markerClusterGroup();
+  clusterGroup.addTo(map);
+
   const activeCategories = new Set(categories);
   const activeNeighborhoods = new Set(neighborhoods);
   const activeCuisines = new Set(cuisines);
@@ -91,10 +97,10 @@
         (place.neighborhood === '' || activeNeighborhoods.has(place.neighborhood)) &&
         (place.cuisine === '' || activeCuisines.has(place.cuisine));
       if (visible) {
-        if (!map.hasLayer(marker)) marker.addTo(map);
+        if (!clusterGroup.hasLayer(marker)) clusterGroup.addLayer(marker);
         bounds.push([place.lat, place.lon]);
-      } else if (map.hasLayer(marker)) {
-        map.removeLayer(marker);
+      } else if (clusterGroup.hasLayer(marker)) {
+        clusterGroup.removeLayer(marker);
       }
     });
     return bounds;
