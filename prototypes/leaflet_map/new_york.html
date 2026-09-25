@@ -66,6 +66,7 @@
   const colors = {"Dining": "#e74c3c", "Coffee/Bakery": "#935116", "Bars/Nightlife": "#8e44ad", "Galleries": "#2980b9", "Museums/Cultural Institutions": "#16a085", "Arts/Studios/Event Spaces": "#d35400", "Shops/Retail": "#f1c40f", "Parks/Outdoors": "#27ae60", "Other/Uncategorized": "#7f8c8d"};
   const totalPlotted = 450;
   const failedCount = 0;
+  const coreBbox = {"west": -74.26, "south": 40.48, "east": -73.68, "north": 40.92};
 
   const categories = [...new Set(places.map(p => p.category))].sort();
   const neighborhoods = [...new Set(places.map(p => p.neighborhood).filter(Boolean))].sort();
@@ -124,11 +125,24 @@
     return bounds;
   }
 
+  // A few legitimately-geocoded places (e.g. upstate day trips) sit far
+  // outside the city proper; including them in fitBounds would zoom out
+  // so far that the dense in-city markers collapse into one cluster. Fit
+  // to the places inside the location's core viewbox when possible - the
+  // rest stay plotted and reachable by panning/zooming out manually.
+  function inCoreBbox([lat, lon]) {
+    if (!coreBbox) return true;
+    return lon >= coreBbox.west && lon <= coreBbox.east &&
+      lat >= coreBbox.south && lat <= coreBbox.north;
+  }
+
   function refresh() {
     const bounds = applyFilters();
     const statsEl = document.getElementById('stats-count');
     if (statsEl) statsEl.textContent = `Showing ${bounds.length} of ${totalPlotted} places`;
-    if (bounds.length) { map.fitBounds(bounds, { padding: [30, 30] }); }
+    const coreBounds = bounds.filter(inCoreBbox);
+    const fitTo = coreBounds.length ? coreBounds : bounds;
+    if (fitTo.length) { map.fitBounds(fitTo, { padding: [30, 30] }); }
     else { map.setView([40.7128, -74.0060], 12); }
   }
 
